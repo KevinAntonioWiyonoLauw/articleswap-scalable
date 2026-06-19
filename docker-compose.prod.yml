@@ -97,6 +97,7 @@ services:
       - article-service
     networks:
       - articleswap-net
+      - dokploy-network
 
   postgres:
     image: postgres:16-alpine
@@ -233,3 +234,5 @@ volumes:
 networks:
   articleswap-net:
     driver: bridge
+  dokploy-network:
+    external: true

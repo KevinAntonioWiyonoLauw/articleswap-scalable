@@ -96,7 +96,7 @@ test('Kafka handler preserves existing topics, stores stemmed content, and publi
     content: 'Pengembangan aplikasi scalable sangat menyenangkan karena users can share articles quickly.'
   });
 
-  assert.deepEqual(ensuredTopics, ['article-submissions', 'article-stemmed']);
+  assert.deepEqual(ensuredTopics, ['article-submissions', 'article-stemmed', 'article-submissions-dlq']);
   assert.equal(subscribedTopic, 'article-submissions');
   assert.deepEqual(storedStemmedContent, [{
     articleId: 'article-1',
@@ -106,4 +106,31 @@ test('Kafka handler preserves existing topics, stores stemmed content, and publi
   assert.equal(publishedEvents[0].topic, 'article-stemmed');
   assert.equal(publishedEvents[0].key, 'article-1');
   assert.equal(publishedEvents[0].value.stemmedContent, 'kembang aplikasi scalable sangat senang karena user can share article quick.');
+});
+
+test('Kafka handler requeues stale pending articles on startup recovery', async () => {
+  const publishedEvents = [];
+  const handler = createArticleHandler({
+    consumeTopic: 'article-submissions',
+    produceTopic: 'article-stemmed',
+    topicEnsurer: { ensure: async () => {} },
+    kafkaConsumer: { subscribe: async () => {} },
+    processingRepository: {
+      findStalePendingArticles: async ({ thresholdMinutes }) => {
+        assert.equal(thresholdMinutes, 30);
+        return [{ id: 'article-2', title: 'T', content: 'Content', sender: 'alice', receiver: 'bob' }];
+      }
+    },
+    eventPublisher: { publish: async (event) => publishedEvents.push(event) },
+    logger: { log: () => {}, warn: () => {}, error: () => {} }
+  });
+
+  const count = await handler.recoverPending({ thresholdMinutes: 30 });
+
+  assert.equal(count, 1);
+  assert.deepEqual(publishedEvents, [{
+    topic: 'article-submissions',
+    key: 'article-2',
+    value: { id: 'article-2', title: 'T', content: 'Content', sender: 'alice', receiver: 'bob' }
+  }]);
 });

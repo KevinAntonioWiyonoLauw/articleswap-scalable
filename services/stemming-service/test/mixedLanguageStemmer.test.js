@@ -12,13 +12,13 @@ import {
 } from '../src/usecases/StemArticle.js';
 
 test('tokenizeText keeps readable punctuation and technical chunks', () => {
-  assert.deepEqual(tokenizeText('API, Kafka 3.7, https://example.com/a?b=1'), [
+  assert.deepEqual(tokenizeText('API, RabbitMQ 3.13, https://example.com/a?b=1'), [
     'API',
     ',',
     ' ',
-    'Kafka',
+    'RabbitMQ',
     ' ',
-    '3.7',
+    '3.13',
     ',',
     ' ',
     'https://example.com/a?b=1'
@@ -43,11 +43,11 @@ test('stems mixed Indonesian and English per token', () => {
 });
 
 test('does not stem technical terms, numbers, URLs, emails, code-like tokens, or symbols', () => {
-  const input = 'API Kafka Redis Docker PostgreSQL storage recycle worker-1 test@example.com https://example.com const user_id = 42;';
+  const input = 'API RabbitMQ Redis Docker PostgreSQL storage recycle worker-1 test@example.com https://example.com const user_id = 42;';
 
   assert.equal(stemMixedLanguageText(input), input);
   assert.equal(stemToken('scalable'), 'scalable');
-  assert.equal(stemToken('Kafka'), 'Kafka');
+  assert.equal(stemToken('RabbitMQ'), 'RabbitMQ');
   assert.equal(stemToken('storage'), 'storage');
   assert.equal(stemToken('recycle'), 'recycle');
 });
@@ -94,7 +94,7 @@ test('StemArticle passes heartbeat through non-blocking async stemmer', async ()
   assert.ok(heartbeats >= 4);
 });
 
-test('Kafka handler preserves existing topics, stores stemmed content, and publishes article-stemmed event', async () => {
+test('RabbitMQ handler preserves existing queues, stores stemmed content, and publishes article-stemmed event', async () => {
   const ensuredTopics = [];
   const publishedEvents = [];
   const storedStemmedContent = [];
@@ -104,10 +104,10 @@ test('Kafka handler preserves existing topics, stores stemmed content, and publi
   const handler = createArticleHandler({
     consumeTopic: 'article-submissions',
     produceTopic: 'article-stemmed',
-    topicEnsurer: {
+    queueEnsurer: {
       ensure: async (topic) => ensuredTopics.push(topic)
     },
-    kafkaConsumer: {
+    eventConsumer: {
       subscribe: async ({ topic, handler: articleHandler }) => {
         subscribedTopic = topic;
         subscribedHandler = articleHandler;
@@ -141,13 +141,13 @@ test('Kafka handler preserves existing topics, stores stemmed content, and publi
   assert.equal(publishedEvents[0].value.stemmedContent, 'kembang aplikasi scalable sangat senang karena user can share article quick.');
 });
 
-test('Kafka handler requeues stale pending articles on startup recovery', async () => {
+test('RabbitMQ handler requeues stale pending articles on startup recovery', async () => {
   const publishedEvents = [];
   const handler = createArticleHandler({
     consumeTopic: 'article-submissions',
     produceTopic: 'article-stemmed',
-    topicEnsurer: { ensure: async () => {} },
-    kafkaConsumer: { subscribe: async () => {} },
+    queueEnsurer: { ensure: async () => {} },
+    eventConsumer: { subscribe: async () => {} },
     processingRepository: {
       findStalePendingArticles: async ({ thresholdMinutes }) => {
         assert.equal(thresholdMinutes, 30);

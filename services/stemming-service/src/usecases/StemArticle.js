@@ -46,7 +46,7 @@ const ENGLISH_COMMON_WORDS = new Set([
 ]);
 
 const TECHNICAL_TERMS = new Set([
-  'api', 'kafka', 'redis', 'docker', 'postgres', 'postgresql', 'scalable', 'cloud',
+  'api', 'rabbitmq', 'redis', 'docker', 'postgres', 'postgresql', 'scalable', 'cloud',
   'worker', 'gateway', 'http', 'https', 'json', 'sql', 'nosql', 'node', 'nodejs',
   'javascript', 'typescript', 'react', 'vue', 'nextjs', 'express',
   'database', 'db', 'url', 'uri', 'email', 'oauth', 'jwt', 'uuid', 'id', 'cpu', 'ram',

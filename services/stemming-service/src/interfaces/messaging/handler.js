@@ -1,6 +1,6 @@
 import { StemArticle } from '../../usecases/StemArticle.js';
 
-export function createArticleHandler({ eventPublisher, kafkaConsumer, topicEnsurer, consumeTopic, produceTopic, processingRepository, logger = console }) {
+export function createArticleHandler({ eventPublisher, eventConsumer, queueEnsurer, consumeTopic, produceTopic, processingRepository, logger = console }) {
   const useCase = new StemArticle();
   const dlqTopic = process.env.DLQ_TOPIC || `${consumeTopic}-dlq`;
   const maxAttempts = Number(process.env.STEMMING_MAX_ATTEMPTS || 3);
@@ -8,11 +8,11 @@ export function createArticleHandler({ eventPublisher, kafkaConsumer, topicEnsur
   return {
     async start() {
       await Promise.all([
-        topicEnsurer.ensure(consumeTopic),
-        topicEnsurer.ensure(produceTopic),
-        topicEnsurer.ensure(dlqTopic)
+        queueEnsurer.ensure(consumeTopic),
+        queueEnsurer.ensure(produceTopic),
+        queueEnsurer.ensure(dlqTopic)
       ]);
-      await kafkaConsumer.subscribe({
+      await eventConsumer.subscribe({
         topic: consumeTopic,
         handler: async (article, message, { heartbeat } = {}) => {
           const result = await withRetry(
@@ -36,7 +36,7 @@ export function createArticleHandler({ eventPublisher, kafkaConsumer, topicEnsur
           logger.log(`[stemming-service] processed ${article.id} → ${article.receiver}`);
         },
         onFailure: async ({ error, message, batch }) => {
-          const rawValue = message.value?.toString() || '';
+          const rawValue = message.value?.toString() || message.content?.toString() || '';
           let parsedValue = null;
           try {
             parsedValue = rawValue ? JSON.parse(rawValue) : null;
@@ -45,18 +45,18 @@ export function createArticleHandler({ eventPublisher, kafkaConsumer, topicEnsur
           }
           await eventPublisher.publish({
             topic: dlqTopic,
-            key: message.key?.toString() || parsedValue?.id || `${batch.partition}:${message.offset}`,
+            key: message.key?.toString() || message.properties?.messageId || parsedValue?.id || `${batch.partition || 0}:${message.fields?.deliveryTag || message.offset || 'unknown'}`,
             value: {
               sourceTopic: batch.topic,
               sourcePartition: batch.partition,
-              sourceOffset: message.offset,
+              sourceOffset: message.offset || message.fields?.deliveryTag,
               failedAt: new Date().toISOString(),
               error: error.message,
               rawValue,
               value: parsedValue
             }
           });
-          logger.error(`[stemming-service] sent failed message to ${dlqTopic} offset ${message.offset}: ${error.message}`);
+          logger.error(`[stemming-service] sent failed message to ${dlqTopic}: ${error.message}`);
         }
       });
       logger.log(`[stemming-service] consuming "${consumeTopic}" → producing "${produceTopic}"; dlq "${dlqTopic}"`);
